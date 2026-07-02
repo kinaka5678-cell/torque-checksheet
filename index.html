@@ -260,6 +260,7 @@ html,body{background:var(--paper);color:var(--ink);font-family:-apple-system,'Se
       <span class="modal-close" id="item-modal-close">&times;</span>
     </div>
     <div class="modal-body">
+      <div><label>เลขจุดตรวจ (No.)</label><input type="number" id="e-no" placeholder="เช่น 1"></div>
       <div><label>ชื่อจุดตรวจ</label><input type="text" id="e-name" placeholder="เช่น BOLT BRACKET XXX"></div>
       <div class="modal-row">
         <div><label>Rank</label>
@@ -820,6 +821,7 @@ function renderMeasConfig() {
 function openItemModal(item) {
   editingItemNo=item?item.no:null;
   document.getElementById("item-modal-title").textContent=item?`แก้ไขจุดเช็ค #${item.no}`:"เพิ่มจุดเช็คใหม่";
+  document.getElementById("e-no").value=item?item.no:nextItemId;
   document.getElementById("e-name").value=item?item.name:"";
   document.getElementById("e-rank").value=item?item.rank:"MEDIUM";
   document.getElementById("e-min").value=item?item.std_min:"";
@@ -877,8 +879,12 @@ document.getElementById("btn-item-confirm").addEventListener("click",()=>{
   const name=document.getElementById("e-name").value.trim();
   const stdMin=parseFloat(document.getElementById("e-min").value);
   const stdMax=parseFloat(document.getElementById("e-max").value);
+  const noVal=parseInt(document.getElementById("e-no").value);
   if(!name){alert("กรุณากรอกชื่อจุดตรวจ");return;}
   if(isNaN(stdMin)||isNaN(stdMax)||stdMin>=stdMax){alert("Std Min/Max ไม่ถูกต้อง");return;}
+  if(isNaN(noVal)||noVal<1){alert("กรุณากรอกเลขจุดตรวจ (No.) ให้ถูกต้อง");return;}
+  const dup=currentItems.find(i=>i.no===noVal && i.no!==editingItemNo);
+  if(dup){alert(`เลขจุดตรวจ ${noVal} ถูกใช้แล้ว (${dup.name}) กรุณาเลือกเลขอื่น`);return;}
   if(editMeasConfig.length===0){alert("ต้องมีช่องกรอกอย่างน้อย 1 กลุ่ม");return;}
 
   const meas_labels=editMeasConfig.map(c=>c.label||"?");
@@ -894,9 +900,14 @@ document.getElementById("btn-item-confirm").addEventListener("click",()=>{
 
   if(editingItemNo!==null){
     const idx=currentItems.findIndex(i=>i.no===editingItemNo);
-    if(idx>=0) currentItems[idx]={...currentItems[idx],...updated};
+    if(idx>=0) currentItems[idx]={...currentItems[idx],...updated,no:noVal};
+    if(noVal!==editingItemNo && state.results[editingItemNo]!==undefined){
+      state.results[noVal]=state.results[editingItemNo];
+      delete state.results[editingItemNo];
+    }
   }else{
-    currentItems.push({no:nextItemId++,...updated});
+    currentItems.push({no:noVal,...updated});
+    nextItemId=Math.max(nextItemId,noVal+1);
   }
 
   // Sync back to model
