@@ -445,7 +445,7 @@ function enterModel(modelId) {
   if (!m) return;
   currentModelId = modelId;
   currentItems = JSON.parse(JSON.stringify(m.items||[]));
-  nextItemId = currentItems.length > 0 ? Math.max(...currentItems.map(i=>i.no))+1 : 100;
+  nextItemId = currentItems.length > 0 ? Math.max(...currentItems.map(i=>i.no))+1 : 1;
 
   // Load saved state for this model
   loadModelState(modelId);
