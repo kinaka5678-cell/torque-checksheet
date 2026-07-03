@@ -562,7 +562,6 @@ function renderItems() {
             <input type="number" inputmode="decimal" step="0.1"
                    data-li="${li}" data-ri="${ri}" placeholder="—">
             <span class="unit-label">N·m</span>
-            ${repCount>1 ? `<button type="button" class="rm-row" data-no="${item.no}" data-li="${li}" title="ลบแถวนี้">×</button>` : ""}
           </div>`;
       }
       groupsHtml += `
@@ -572,7 +571,6 @@ function renderItems() {
             <span style="font-size:9px;color:var(--ink-soft);margin-left:auto;">Std: ${item.std_min}–${item.std_max} N·m</span>
           </div>
           <div class="meas-group-inputs">${rowsHtml}</div>
-          <button type="button" class="meas-add-row" data-no="${item.no}" data-li="${li}">+ เพิ่มข้อมูลสุ่มเช็ค (${lbl})</button>
         </div>`;
     });
 
@@ -594,10 +592,6 @@ function renderItems() {
       <div class="item-body">
         <div class="item-img-wrap ${item.img?'':'no-img'}" data-img="${item.img||''}">${imgHtml}${item.img?'<span class="zoom-hint">🔍 แตะเพื่อขยาย</span>':''}</div>
         <div class="item-controls">
-          <div class="auditor-row">
-            <label>ผู้ตรวจ</label>
-            <input type="text" class="item-auditor" placeholder="ชื่อผู้ตรวจจุดนี้">
-          </div>
           ${groupsHtml}
           <div class="result-row">
             <div class="xr-display">
@@ -662,8 +656,7 @@ function updateCard(card, item) {
   if (judge==="OK") card.classList.add("judge-OK");
   if (judge==="NG") card.classList.add("judge-NG");
 
-  const auditorVal = card.querySelector(".item-auditor").value;
-  state.results[item.no] = {meas2d, xbar, range, judge, auditor:auditorVal};
+  state.results[item.no] = {meas2d, xbar, range, judge, auditor: (state.results[item.no]&&state.results[item.no].auditor) || ""};
   updateProgress();
 }
 
@@ -688,7 +681,7 @@ function attachListeners() {
   document.querySelectorAll(".item-card").forEach(card=>{
     const no=parseInt(card.dataset.no);
     const item=currentItems.find(i=>i.no===no);
-    card.querySelectorAll(".meas-row input,.item-auditor").forEach(inp=>{
+    card.querySelectorAll(".meas-row input").forEach(inp=>{
       inp.addEventListener("input",()=>{updateCard(card,item);markUnsaved();});
     });
     card.querySelector(".item-img-wrap").addEventListener("click",e=>{
@@ -697,19 +690,6 @@ function attachListeners() {
       document.getElementById("lightbox").classList.add("show");
     });
     card.querySelector(".edit-icon-btn").addEventListener("click",()=>openItemModal(item));
-
-    card.querySelectorAll(".meas-add-row").forEach(btn=>{
-      btn.addEventListener("click",()=>{
-        const li=parseInt(btn.dataset.li);
-        adjustMeasReps(item, li, +1);
-      });
-    });
-    card.querySelectorAll(".rm-row").forEach(btn=>{
-      btn.addEventListener("click",()=>{
-        const li=parseInt(btn.dataset.li);
-        adjustMeasReps(item, li, -1);
-      });
-    });
   });
 }
 
@@ -1033,7 +1013,7 @@ document.getElementById("btn-save").addEventListener("click",async()=>{
 document.getElementById("btn-clear").addEventListener("click",()=>{
   if(!confirm("ล้างข้อมูลที่กรอกทั้งหมด?"))return;
   state.results={};
-  document.querySelectorAll(".meas-row input,.item-auditor").forEach(i=>i.value="");
+  document.querySelectorAll(".meas-row input").forEach(i=>i.value="");
   currentItems.forEach(item=>{
     const card=document.querySelector(`.item-card[data-no="${item.no}"]`);
     if(card)updateCard(card,item);
