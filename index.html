@@ -93,12 +93,13 @@ html,body{background:var(--paper);color:var(--ink);font-family:-apple-system,'Se
 .rank-badge.LOW{background:var(--low);}
 .edit-icon-btn{border:none;background:#EEEDE7;color:var(--ink-soft);width:26px;height:26px;border-radius:6px;cursor:pointer;font-size:13px;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
 
-.item-body{display:grid;grid-template-columns:120px 1fr;gap:11px;padding:3px 12px 12px;}
-@media(max-width:500px){.item-body{grid-template-columns:1fr;}}
+.item-body{display:grid;grid-template-columns:230px 1fr;gap:14px;padding:3px 12px 12px;}
+@media(max-width:760px){.item-body{grid-template-columns:1fr;}}
 
-.item-img-wrap{background:#EEEDE7;border-radius:7px;overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:90px;cursor:zoom-in;border:1px solid var(--line);}
-.item-img-wrap img{width:100%;height:auto;display:block;}
+.item-img-wrap{background:#EEEDE7;border-radius:7px;overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:230px;cursor:zoom-in;border:1px solid var(--line);position:relative;}
+.item-img-wrap img{width:100%;height:100%;object-fit:contain;display:block;}
 .item-img-wrap.no-img{color:var(--ink-soft);font-size:10px;text-align:center;padding:8px;cursor:default;}
+.zoom-hint{position:absolute;bottom:5px;right:6px;background:rgba(20,24,30,.65);color:#fff;font-size:10px;padding:3px 7px;border-radius:5px;pointer-events:none;}
 
 .item-controls{display:flex;flex-direction:column;gap:6px;}
 .std-row{font-family:monospace;font-size:11px;color:var(--ink-soft);background:#F7F6F2;border:1px dashed var(--line);border-radius:5px;padding:4px 8px;display:flex;justify-content:space-between;gap:6px;flex-wrap:wrap;}
@@ -591,7 +592,7 @@ function renderItems() {
         <button class="edit-icon-btn" data-no="${item.no}">✎</button>
       </div>
       <div class="item-body">
-        <div class="item-img-wrap ${item.img?'':'no-img'}" data-img="${item.img||''}">${imgHtml}</div>
+        <div class="item-img-wrap ${item.img?'':'no-img'}" data-img="${item.img||''}">${imgHtml}${item.img?'<span class="zoom-hint">🔍 แตะเพื่อขยาย</span>':''}</div>
         <div class="item-controls">
           <div class="auditor-row">
             <label>ผู้ตรวจ</label>
