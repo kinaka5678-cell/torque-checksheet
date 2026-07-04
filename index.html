@@ -113,7 +113,7 @@ html,body{background:var(--paper);color:var(--ink);font-family:-apple-system,'Se
 
 /* Measurement groups */
 .meas-group{border:1px solid var(--line);border-radius:7px;overflow:hidden;margin-bottom:2px;}
-.meas-group-header{background:#F7F6F2;padding:4px 10px;font-size:10px;font-weight:700;color:var(--steel);display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--line);}
+.meas-group-header{background:#F7F6F2;padding:6px 10px;font-size:14px;font-weight:700;color:var(--steel);display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--line);}
 .meas-group-inputs{padding:6px 8px;display:flex;flex-direction:column;gap:4px;}
 .meas-row{display:flex;align-items:center;gap:6px;}
 .rep-label{font-family:monospace;font-size:10px;color:var(--ink-soft);min-width:22px;}
@@ -568,7 +568,7 @@ function renderItems() {
         <div class="meas-group">
           <div class="meas-group-header">
             <span>${lbl}</span>
-            <span style="font-size:9px;color:var(--ink-soft);margin-left:auto;">Std: ${item.std_min}–${item.std_max} N·m</span>
+            <span style="font-size:14px;font-weight:600;color:var(--ink-soft);margin-left:auto;">Std: ${item.std_min}–${item.std_max} N·m</span>
           </div>
           <div class="meas-group-inputs">${rowsHtml}</div>
         </div>`;
