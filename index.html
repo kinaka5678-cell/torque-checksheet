@@ -546,7 +546,7 @@ function renderItems() {
   list.innerHTML = "";
   document.getElementById("total-count").textContent = currentItems.length;
 
-  currentItems.forEach(item => {
+  currentItems.slice().sort((a,b)=>a.no-b.no).forEach(item => {
     const labels = item.meas_labels || ["RH","LH"];
     const reps   = item.meas_reps   || labels.map(()=>1);
 
