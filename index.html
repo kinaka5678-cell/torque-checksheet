@@ -285,7 +285,7 @@ html,body{background:var(--paper);color:var(--ink);font-family:-apple-system,'Se
         <label>รูปอ้างอิง (แตะเพื่ออัปโหลด)</label>
         <div class="img-upload-box" id="img-upload-box">
           <img id="img-preview" style="display:none;">
-          <span id="img-placeholder">📷 แตะเพื่อเลือกรูป</span>
+          <span id="img-placeholder">📷 แตะเพื่อเลือกรูป หรือวาง (Ctrl+V)</span>
         </div>
         <input type="file" id="img-file" accept="image/*" style="display:none;">
       </div>
@@ -831,15 +831,14 @@ document.getElementById("btn-add-label").addEventListener("click",()=>{
   editMeasConfig.push({label:"",reps:1}); renderMeasConfig();
 });
 
-document.getElementById("img-upload-box").addEventListener("click",()=>document.getElementById("img-file").click());
-document.getElementById("img-file").addEventListener("change",async e=>{
-  const file=e.target.files[0]; if(!file)return;
+async function uploadItemImage(file){
+  if(!file)return;
   const ph=document.getElementById("img-placeholder");
   const prev=document.getElementById("img-preview");
   ph.style.display="block"; prev.style.display="none";
   ph.textContent="⏳ กำลังอัปโหลดรูป...";
   try{
-    const ext=(file.name.split(".").pop()||"jpg").toLowerCase();
+    const ext=((file.name||"").split(".").pop()||file.type.split("/")[1]||"jpg").toLowerCase();
     const path=`items/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
     const { error: upErr } = await sb.storage.from("item-images").upload(path, file, { cacheControl:"3600", upsert:false });
     if(upErr) throw upErr;
@@ -851,10 +850,42 @@ document.getElementById("img-file").addEventListener("change",async e=>{
   }catch(err){
     console.error("image upload error:",err);
     alert("อัปโหลดรูปไม่สำเร็จ: "+(err.message||err));
-    ph.textContent="📷 แตะเพื่อเลือกรูป";
+    ph.textContent="📷 แตะเพื่อเลือกรูป หรือวาง (Ctrl+V)";
     ph.style.display="block"; prev.style.display="none";
   }
+}
+
+document.getElementById("img-upload-box").addEventListener("click",()=>document.getElementById("img-file").click());
+document.getElementById("img-file").addEventListener("change",e=>{
+  uploadItemImage(e.target.files[0]);
 });
+
+// วางรูปด้วย Ctrl+V — ทำงานเมื่อโฟกัสอยู่ในกรอบรูป หรือตอนเปิด modal แก้ไขจุดตรวจอยู่
+document.getElementById("img-upload-box").setAttribute("tabindex","0");
+document.getElementById("img-upload-box").addEventListener("paste",e=>{
+  const items=(e.clipboardData||window.clipboardData).items;
+  for(const it of items){
+    if(it.type.indexOf("image")===0){
+      e.preventDefault();
+      uploadItemImage(it.getAsFile());
+      return;
+    }
+  }
+});
+document.addEventListener("paste",e=>{
+  const backdrop=document.getElementById("item-modal-backdrop");
+  if(!backdrop.classList.contains("show"))return;
+  if(document.activeElement && ["INPUT","TEXTAREA"].includes(document.activeElement.tagName))return;
+  const items=(e.clipboardData||window.clipboardData).items;
+  for(const it of items){
+    if(it.type.indexOf("image")===0){
+      e.preventDefault();
+      uploadItemImage(it.getAsFile());
+      return;
+    }
+  }
+});
+
 
 document.getElementById("btn-item-confirm").addEventListener("click",()=>{
   const name=document.getElementById("e-name").value.trim();
