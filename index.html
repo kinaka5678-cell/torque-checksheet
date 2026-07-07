@@ -125,6 +125,9 @@ html,body{background:var(--paper);color:var(--ink);font-family:-apple-system,'Se
 .meas-add-row{border:none;border-top:1px dashed var(--line);background:#F0EDE6;color:var(--steel);font-size:10px;font-weight:700;padding:6px;cursor:pointer;width:100%;letter-spacing:.02em;}
 .meas-add-row:hover{background:#E8E4DB;}
 .meas-row .rm-row{border:none;background:none;color:var(--high);font-size:15px;cursor:pointer;padding:0 4px;line-height:1;}
+.na-toggle{display:flex;align-items:center;gap:3px;font-size:10px;color:var(--ink-soft);white-space:nowrap;cursor:pointer;user-select:none;}
+.na-toggle input{width:15px;height:15px;cursor:pointer;accent-color:var(--high);}
+.meas-row input[type="number"]:disabled{background:#F3F1EA;color:var(--ink-soft);text-decoration:line-through;}
 
 .result-row{display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;}
 .xr-display{font-family:monospace;font-size:10px;color:var(--ink-soft);display:flex;gap:8px;flex-wrap:wrap;}
@@ -156,7 +159,7 @@ html,body{background:var(--paper);color:var(--ink);font-family:-apple-system,'Se
 /* Meas config in modal */
 .meas-config{border:1.5px solid var(--line);border-radius:8px;padding:10px;}
 .meas-config-title{font-size:10px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;margin-bottom:8px;}
-.meas-config-row{display:flex;align-items:center;gap:8px;margin-bottom:7px;padding-bottom:7px;border-bottom:1px solid var(--line);}
+.meas-config-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:7px;padding-bottom:7px;border-bottom:1px solid var(--line);}
 .meas-config-row:last-child{margin-bottom:0;padding-bottom:0;border-bottom:none;}
 .meas-config-row .lbl-inp{flex:1;padding:6px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:12px;}
 .meas-config-row .rep-inp{width:54px;padding:6px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:12px;text-align:center;}
@@ -554,14 +557,20 @@ function renderItems() {
     let groupsHtml = "";
     labels.forEach((lbl,li) => {
       const repCount = reps[li] || 1;
+      const naDefault = (item.meas_na && item.meas_na[li]) || [];
       let rowsHtml = "";
       for (let ri=0; ri<repCount; ri++) {
+        const isNa = !!naDefault[ri];
         rowsHtml += `
           <div class="meas-row">
             <span class="rep-label">${repCount>1 ? (ri+1)+"." : ""}</span>
             <input type="number" inputmode="decimal" step="0.1"
-                   data-li="${li}" data-ri="${ri}" placeholder="—">
+                   data-li="${li}" data-ri="${ri}" placeholder="—" ${isNa?"disabled":""}>
             <span class="unit-label">N·m</span>
+            <label class="na-toggle">
+              <input type="checkbox" class="na-check" data-li="${li}" data-ri="${ri}" ${isNa?"checked":""}>
+              <span>ติด</span>
+            </label>
           </div>`;
       }
       groupsHtml += `
@@ -614,7 +623,7 @@ function updateCard(card, item) {
   const reps   = item.meas_reps   || labels.map(()=>1);
 
   // Collect all meas values: flat array ordered by [li][ri]
-  const allInputs = card.querySelectorAll(".meas-row input");
+  const allInputs = card.querySelectorAll('.meas-row input[type="number"]');
   const meas2d = [];  // meas2d[li][ri] = value
   labels.forEach((_,li) => { meas2d[li] = []; });
   allInputs.forEach(inp => {
@@ -656,7 +665,16 @@ function updateCard(card, item) {
   if (judge==="OK") card.classList.add("judge-OK");
   if (judge==="NG") card.classList.add("judge-NG");
 
-  state.results[item.no] = {meas2d, xbar, range, judge, auditor: (state.results[item.no]&&state.results[item.no].auditor) || ""};
+  // Collect na (ติด) checkbox state, ordered by [li][ri]
+  const na2d = [];
+  labels.forEach((_,li) => { na2d[li] = []; });
+  card.querySelectorAll(".na-check").forEach(chk=>{
+    const li=parseInt(chk.dataset.li), ri=parseInt(chk.dataset.ri);
+    if(!na2d[li]) na2d[li]=[];
+    na2d[li][ri]=chk.checked;
+  });
+
+  state.results[item.no] = {meas2d, na2d, xbar, range, judge, auditor: (state.results[item.no]&&state.results[item.no].auditor) || ""};
   updateProgress();
 }
 
@@ -681,8 +699,20 @@ function attachListeners() {
   document.querySelectorAll(".item-card").forEach(card=>{
     const no=parseInt(card.dataset.no);
     const item=currentItems.find(i=>i.no===no);
-    card.querySelectorAll(".meas-row input").forEach(inp=>{
+    card.querySelectorAll('.meas-row input[type="number"]').forEach(inp=>{
       inp.addEventListener("input",()=>{updateCard(card,item);markUnsaved();});
+    });
+    card.querySelectorAll(".na-check").forEach(chk=>{
+      chk.addEventListener("change",()=>{
+        const li=chk.dataset.li, ri=chk.dataset.ri;
+        const pairedInput=card.querySelector(`.meas-row input[type="number"][data-li="${li}"][data-ri="${ri}"]`);
+        if(pairedInput){
+          pairedInput.disabled=chk.checked;
+          if(chk.checked) pairedInput.value="";
+        }
+        updateCard(card,item);
+        markUnsaved();
+      });
     });
     card.querySelector(".item-img-wrap").addEventListener("click",e=>{
       const src=e.currentTarget.dataset.img; if(!src)return;
@@ -706,7 +736,7 @@ function adjustMeasReps(item, li, delta){
   const card=document.querySelector(`.item-card[data-no="${item.no}"]`);
   const vals=[];
   if(card){
-    card.querySelectorAll(`.meas-row input[data-li="${li}"]`).forEach(inp=>{
+    card.querySelectorAll(`.meas-row input[type="number"][data-li="${li}"]`).forEach(inp=>{
       vals[parseInt(inp.dataset.ri)]=inp.value;
     });
   }
@@ -727,7 +757,7 @@ function adjustMeasReps(item, li, delta){
   // Re-apply the values that existed before the row count changed
   const newCard=document.querySelector(`.item-card[data-no="${item.no}"]`);
   if(newCard){
-    newCard.querySelectorAll(`.meas-row input[data-li="${li}"]`).forEach(inp=>{
+    newCard.querySelectorAll(`.meas-row input[type="number"][data-li="${li}"]`).forEach(inp=>{
       const ri=parseInt(inp.dataset.ri);
       if(vals[ri]!==undefined && vals[ri]!=="") inp.value=vals[ri];
     });
@@ -775,7 +805,16 @@ document.getElementById("lightbox").addEventListener("click",e=>{if(e.target.id=
 // ══════════════════════════════════════════════════════════════════
 function renderMeasConfig() {
   const wrap=document.getElementById("meas-config-rows");
-  wrap.innerHTML=editMeasConfig.map((cfg,i)=>`
+  wrap.innerHTML=editMeasConfig.map((cfg,i)=>{
+    if(!cfg.na) cfg.na=[];
+    while(cfg.na.length<cfg.reps) cfg.na.push(false);
+    cfg.na.length=cfg.reps;
+    const naChecks=cfg.na.map((v,ri)=>`
+      <label class="na-toggle" style="margin-left:${ri===0?"8px":"0"};">
+        <input type="checkbox" class="cfg-na-check" data-ci="${i}" data-ri="${ri}" ${v?"checked":""}>
+        <span>${ri+1}.ติด</span>
+      </label>`).join("");
+    return `
     <div class="meas-config-row">
       <span style="font-size:11px;color:var(--ink-soft);min-width:20px;">${i+1}.</span>
       <input class="lbl-inp" type="text" value="${cfg.label}" data-ci="${i}" placeholder="Label เช่น RH">
@@ -783,13 +822,24 @@ function renderMeasConfig() {
       <input class="rep-inp" type="number" min="1" max="30" value="${cfg.reps}" data-ri="${i}" placeholder="1">
       <span style="font-size:10px;color:var(--ink-soft);">ครั้ง</span>
       ${editMeasConfig.length>1?`<button class="rm-lbl" data-del="${i}">×</button>`:""}
-    </div>`).join("");
+      <div style="flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;">${naChecks}</div>
+    </div>`;
+  }).join("");
 
   wrap.querySelectorAll(".lbl-inp").forEach(inp=>{
     inp.addEventListener("input",e=>{ editMeasConfig[parseInt(e.target.dataset.ci)].label=e.target.value; });
   });
   wrap.querySelectorAll(".rep-inp").forEach(inp=>{
-    inp.addEventListener("input",e=>{ editMeasConfig[parseInt(e.target.dataset.ri)].reps=Math.max(1,parseInt(e.target.value)||1); });
+    inp.addEventListener("input",e=>{
+      editMeasConfig[parseInt(e.target.dataset.ri)].reps=Math.max(1,parseInt(e.target.value)||1);
+      renderMeasConfig();
+    });
+  });
+  wrap.querySelectorAll(".cfg-na-check").forEach(chk=>{
+    chk.addEventListener("change",e=>{
+      const ci=parseInt(e.target.dataset.ci), ri=parseInt(e.target.dataset.ri);
+      editMeasConfig[ci].na[ri]=e.target.checked;
+    });
   });
   wrap.querySelectorAll(".rm-lbl").forEach(btn=>{
     btn.addEventListener("click",e=>{
@@ -810,7 +860,11 @@ function openItemModal(item) {
   pendingImg=item?(item.img||""):"";
   const labels=item?(item.meas_labels||["RH","LH"]):["RH","LH"];
   const reps=item?(item.meas_reps||labels.map(()=>1)):labels.map(()=>1);
-  editMeasConfig=labels.map((lbl,i)=>({label:lbl,reps:reps[i]||1}));
+  editMeasConfig=labels.map((lbl,i)=>({
+    label:lbl,
+    reps:reps[i]||1,
+    na:(item&&item.meas_na&&item.meas_na[i])?item.meas_na[i].slice():[]
+  }));
 
   const prev=document.getElementById("img-preview");
   const ph=document.getElementById("img-placeholder");
@@ -901,11 +955,12 @@ document.getElementById("btn-item-confirm").addEventListener("click",()=>{
 
   const meas_labels=editMeasConfig.map(c=>c.label||"?");
   const meas_reps=editMeasConfig.map(c=>c.reps||1);
+  const meas_na=editMeasConfig.map(c=>(c.na||[]).slice(0,c.reps));
 
   const updated={
     name,rank:document.getElementById("e-rank").value,
     std_min:stdMin,std_max:stdMax,
-    meas_labels,meas_reps,
+    meas_labels,meas_reps,meas_na,
     meas_count:meas_labels.length,
     img:pendingImg,
   };
@@ -960,7 +1015,7 @@ function restoreResults() {
     const r=state.results[no];
     const item=currentItems.find(i=>i.no===no);
     if(!r||!item)return;
-    const inputs=card.querySelectorAll(".meas-row input");
+    const inputs=card.querySelectorAll('.meas-row input[type="number"]');
     inputs.forEach(inp=>{
       const li=parseInt(inp.dataset.li);
       const ri=parseInt(inp.dataset.ri);
@@ -969,6 +1024,17 @@ function restoreResults() {
     });
     const aud=card.querySelector(".item-auditor");
     if(aud&&r.auditor)aud.value=r.auditor;
+    card.querySelectorAll(".na-check").forEach(chk=>{
+      const li=parseInt(chk.dataset.li);
+      const ri=parseInt(chk.dataset.ri);
+      const isNa=!!(r.na2d&&r.na2d[li]&&r.na2d[li][ri]);
+      chk.checked=isNa;
+      const pairedInput=card.querySelector(`.meas-row input[type="number"][data-li="${li}"][data-ri="${ri}"]`);
+      if(pairedInput){
+        pairedInput.disabled=isNa;
+        if(isNa)pairedInput.value="";
+      }
+    });
     updateCard(card,item);
   });
 }
@@ -1044,11 +1110,8 @@ document.getElementById("btn-save").addEventListener("click",async()=>{
 document.getElementById("btn-clear").addEventListener("click",()=>{
   if(!confirm("ล้างข้อมูลที่กรอกทั้งหมด?"))return;
   state.results={};
-  document.querySelectorAll(".meas-row input").forEach(i=>i.value="");
-  currentItems.forEach(item=>{
-    const card=document.querySelector(`.item-card[data-no="${item.no}"]`);
-    if(card)updateCard(card,item);
-  });
+  renderItems();
+  attachListeners();
   markUnsaved();
 });
 
