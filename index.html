@@ -1131,15 +1131,30 @@ document.getElementById("btn-export").addEventListener("click",()=>{
   currentItems.forEach(item=>{
     const r=state.results[item.no]||{};
     const meas2d=r.meas2d||[];
+    const na2d=r.na2d||[];
     const labels=item.meas_labels||["RH","LH"];
     if(labels.length>2){
       console.warn(`Item #${item.no} "${item.name}" has ${labels.length} sides — the Excel chart only supports 2 (RH/LH). Extra sides won't export.`);
     }
-    const side1Vals=(meas2d[0]||[]).filter(v=>v!=null&&!isNaN(v));
-    const side2Vals=(meas2d[1]||[]).filter(v=>v!=null&&!isNaN(v));
-    if(side1Vals.length>12||side2Vals.length>12){
+    const reps=item.meas_reps||labels.map(()=>1);
+    if((reps[0]||0)>12||(reps[1]||0)>12){
       console.warn(`Item #${item.no} "${item.name}" has more than 12 samples on one side — only the first 12 will export.`);
     }
+    // Build each side positionally by rep index (not compressed) so sample #3
+    // always lands in row 3 of Excel, even if #1/#2 are blank or marked ติด
+    const buildSide=(li)=>{
+      const vals=meas2d[li]||[];
+      const nas=na2d[li]||[];
+      const out=[];
+      for(let i=0;i<12;i++){
+        if(nas[i]) out.push("ติด");
+        else if(vals[i]!=null && !isNaN(vals[i])) out.push(vals[i]);
+        else out.push("");
+      }
+      return out;
+    };
+    const side1Vals=buildSide(0);
+    const side2Vals=buildSide(1);
     const sideStr=labels.join("/");
     const auditorItem=r.auditor||state.meta.auditor||"";
     const row=[
@@ -1148,8 +1163,8 @@ document.getElementById("btn-export").addEventListener("click",()=>{
       item.no,item.name,item.std_min,item.std_max,
       sideStr
     ];
-    for(let i=0;i<12;i++) row.push(side1Vals[i]!=null?side1Vals[i]:"");
-    for(let i=0;i<12;i++) row.push(side2Vals[i]!=null?side2Vals[i]:"");
+    for(let i=0;i<12;i++) row.push(side1Vals[i]);
+    for(let i=0;i<12;i++) row.push(side2Vals[i]);
     row.push(
       r.xbar!=null?r.xbar.toFixed(2):"",
       r.range!=null?r.range.toFixed(2):"",
