@@ -201,6 +201,8 @@ html,body{background:var(--paper);color:var(--ink);font-family:-apple-system,'Se
     <p>เลือก Model เพื่อเริ่มตรวจสอบ</p>
   </div>
   <div class="model-list" id="model-list"></div>
+  <button id="btn-import-excel" style="display:block;margin:10px auto 0;padding:9px 18px;border-radius:8px;border:1.5px dashed var(--line);background:transparent;color:var(--steel);font-size:12px;font-weight:700;cursor:pointer;">📥 นำเข้าจาก Excel Checksheet</button>
+  <input type="file" id="import-excel-file" accept=".xlsx,.xls" style="display:none;">
   <div class="model-action-bar">Hino QA — Digital Tightening Torque Inspection</div>
 </div>
 
@@ -338,6 +340,7 @@ html,body{background:var(--paper);color:var(--ink);font-family:-apple-system,'Se
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 // ══════════════════════════════════════════════════════════════════
@@ -527,6 +530,117 @@ document.getElementById("btn-model-confirm").addEventListener("click", () => {
   saveModels();
   closeModelModal();
   renderModelList();
+});
+
+// ══════════════════════════════════════════════════════════════════
+// IMPORT FROM EXCEL CHECKSHEET
+// Parses the standard "Tightening Torque Check Sheet" format:
+// Col C = item name, Col L = Rigidity (rank), Col N = Vehicle Insp. Std Min,
+// Col P = Max, Col R = side label + numbered sample list (e.g. "ซ้าย(LH)\n1.\n2.")
+// ══════════════════════════════════════════════════════════════════
+function parseNumFromCell(val){
+  if(val==null) return null;
+  const s=String(val);
+  const m=s.match(/[\d,]+\.?\d*/);
+  if(!m) return null;
+  const n=parseFloat(m[0].replace(/,/g,""));
+  return isNaN(n)?null:n;
+}
+
+function detectSideLabel(text){
+  const s=String(text||"");
+  if(/LH|ซ้าย/i.test(s)) return "LH";
+  if(/RH|ขวา/i.test(s)) return "RH";
+  if(/FRONT|หน้า/i.test(s)) return "FRONT";
+  if(/REAR|หลัง/i.test(s)) return "REAR";
+  return "จุดวัด";
+}
+
+function countReps(text){
+  const s=String(text||"");
+  const matches=s.match(/(^|\n)\s*\d+\s*\./gm);
+  return matches && matches.length>0 ? matches.length : 1;
+}
+
+function rankFromText(text){
+  const s=String(text||"").toLowerCase();
+  if(s.includes("high")) return "HIGH";
+  if(s.includes("low")) return "LOW";
+  return "MEDIUM";
+}
+
+function parseChecksheetWorkbook(workbook){
+  const sheetName=workbook.SheetNames[0];
+  const ws=workbook.Sheets[sheetName];
+  const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null,raw:false});
+
+  const items=[];
+  let itemNo=1;
+  rows.forEach(row=>{
+    const nameRaw=row[2];      // column C
+    const rankRaw=row[11];     // column L
+    const minRaw=row[13];      // column N
+    const maxRaw=row[15];      // column P
+    const resultRaw=row[17];   // column R
+
+    if(!nameRaw) return;
+    const minVal=parseNumFromCell(minRaw);
+    const maxVal=parseNumFromCell(maxRaw);
+    if(minVal==null || maxVal==null) return; // skip header/notes/title rows
+
+    const name=String(nameRaw).replace(/\n+/g," ").replace(/\s+/g," ").trim();
+    if(!name) return;
+
+    const label=detectSideLabel(resultRaw);
+    const reps=countReps(resultRaw);
+
+    items.push({
+      no:itemNo++,
+      name,
+      rank:rankFromText(rankRaw),
+      std_min:minVal,
+      std_max:maxVal,
+      meas_labels:[label],
+      meas_reps:[reps],
+      meas_na:[[]],
+      meas_count:1,
+      img:""
+    });
+  });
+  return items;
+}
+
+document.getElementById("btn-import-excel").addEventListener("click",()=>{
+  document.getElementById("import-excel-file").click();
+});
+
+document.getElementById("import-excel-file").addEventListener("change",e=>{
+  const file=e.target.files[0];
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=async(ev)=>{
+    try{
+      const data=new Uint8Array(ev.target.result);
+      const workbook=XLSX.read(data,{type:"array"});
+      const items=parseChecksheetWorkbook(workbook);
+      if(items.length===0){
+        alert("ไม่พบข้อมูลจุดตรวจในไฟล์นี้ รูปแบบไฟล์อาจไม่ตรงกับที่รองรับ กรุณาตรวจสอบหรือเพิ่มจุดตรวจด้วยตัวเองแทน");
+        return;
+      }
+      const modelName=prompt(`พบจุดตรวจ ${items.length} จุดในไฟล์\n\nตั้งชื่อ Model สำหรับข้อมูลนี้:`, file.name.replace(/\.(xlsx|xls)$/i,""));
+      if(!modelName) return;
+      const newId="model_"+(nextModelId++);
+      models.push({id:newId, name:modelName.trim(), desc:"นำเข้าจาก "+file.name, icon:"🚛", items});
+      await saveModels();
+      renderModelList();
+      alert(`นำเข้าสำเร็จ! เพิ่ม Model "${modelName}" พร้อมจุดตรวจ ${items.length} จุด\n\nแนะนำ: เข้าไปดูรายการที่นำเข้า แล้วแก้ไข/เพิ่มรูปภาพให้แต่ละจุดตรวจอีกครั้งเพื่อความถูกต้อง`);
+    }catch(err){
+      console.error("Excel import error:",err);
+      alert("อ่านไฟล์ไม่สำเร็จ: "+(err.message||err));
+    }
+    e.target.value="";
+  };
+  reader.readAsArrayBuffer(file);
 });
 
 document.getElementById("btn-model-delete").addEventListener("click", () => {
