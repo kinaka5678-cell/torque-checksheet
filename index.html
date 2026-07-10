@@ -562,15 +562,16 @@ function parseNumFromCell(val){
 function detectLabelsAndReps(text){
   const s=String(text||"");
   const reps=countReps(s);
-  // Torque check sheets commonly print only "LH" (or only "RH") as the
-  // example/reference side, but symmetric bolts are always checked on
-  // BOTH sides of the vehicle with the same sample count. So if either
-  // side is mentioned, import both RH and LH groups.
+  // Torque check sheets commonly print only one side/direction as the
+  // example/reference, but symmetric bolts are always checked on BOTH
+  // sides with the same sample count. So if either member of a pair is
+  // mentioned, import both.
   if(/LH|RH|ซ้าย|ขวา/i.test(s)){
     return { labels:["RH","LH"], reps:[reps,reps] };
   }
-  if(/FRONT|หน้า/i.test(s)) return { labels:["FRONT"], reps:[reps] };
-  if(/REAR|หลัง/i.test(s)) return { labels:["REAR"], reps:[reps] };
+  if(/FRONT|REAR|หน้า|หลัง/i.test(s)){
+    return { labels:["FRONT","REAR"], reps:[reps,reps] };
+  }
   return { labels:["จุดวัด"], reps:[reps] };
 }
 
