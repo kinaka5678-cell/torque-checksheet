@@ -633,8 +633,8 @@ function parseFormatA(rows){
     const hasRight = rightRaw!=null && String(rightRaw).trim()!=="";
 
     const labels=[], reps=[];
-    if(hasLeft){ labels.push(labelForColumn(leftRaw,"LH")); reps.push(countReps(leftRaw)); }
-    if(hasRight){ labels.push(labelForColumn(rightRaw,"RH")); reps.push(countReps(rightRaw)); }
+    if(hasLeft){ labels.push(labelForColumn(leftRaw,"จุดวัด 1")); reps.push(countReps(leftRaw)); }
+    if(hasRight){ labels.push(labelForColumn(rightRaw,"จุดวัด 2")); reps.push(countReps(rightRaw)); }
     if(!hasLeft && !hasRight){ labels.push("จุดวัด"); reps.push(1); }
 
     items.push({
@@ -748,7 +748,86 @@ function parseFormatB(rows){
   return items;
 }
 
+// Format X-R: an X-R Chart output workbook (one sheet per check point,
+// sheet name like "1.ENGINE FR MOUNTING UPPER"). These files record
+// measured data but don't store a Rank directly. However each sheet DOES
+// have both the Drawing Std (มาตรฐาน, row2) and the Vehicle Inspection
+// Std (row3) - and the ratio between their centers reveals which
+// rigidity class was used to compute the inspection range:
+//   center(Vehicle Insp) / center(Drawing Std) ≈ 1.15 -> HIGH
+//                                              ≈ 1.10 -> MEDIUM
+//                                              ≈ 1.05 -> LOW
+// (Validated against 3 known items from an actual checksheet - all matched.)
+function classifyRankFromRatio(dMin,dMax,vMin,vMax){
+  if(dMin==null||dMax==null) return "MEDIUM";
+  const dCenter=(dMin+dMax)/2;
+  const vCenter=(vMin+vMax)/2;
+  if(!dCenter) return "MEDIUM";
+  const ratio=vCenter/dCenter;
+  const candidates=[{r:"LOW",v:1.05},{r:"MEDIUM",v:1.10},{r:"HIGH",v:1.15}];
+  let best=candidates[0], bestDiff=Math.abs(ratio-candidates[0].v);
+  candidates.forEach(c=>{
+    const diff=Math.abs(ratio-c.v);
+    if(diff<bestDiff){bestDiff=diff;best=c;}
+  });
+  return best.r;
+}
+
+function parseXRChartWorkbook(workbook){
+  const items=[];
+  workbook.SheetNames.forEach(sn=>{
+    const m=sn.match(/^(\d+)\.(.*)$/);
+    if(!m) return;
+    const ws=workbook.Sheets[sn];
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null,raw:false});
+    if(rows.length<4) return;
+
+    const nameCell = rows[1] ? rows[1][6] : null; // row2, col G
+    const name=String(nameCell||m[2]||"").replace(/\n+/g," ").replace(/\s+/g," ").trim();
+    if(!name) return;
+
+    const dMin=parseNumFromCell(rows[1]?rows[1][15]:null); // row2, col P
+    const dMax=parseNumFromCell(rows[1]?rows[1][17]:null); // row2, col R
+    const vMin=parseNumFromCell(rows[2]?rows[2][15]:null); // row3, col P
+    const vMax=parseNumFromCell(rows[2]?rows[2][17]:null); // row3, col R
+    if(vMin==null||vMax==null) return; // no inspection std -> can't build item
+
+    const rank=classifyRankFromRatio(dMin,dMax,vMin,vMax);
+
+    // Detect RH/LH (or other) side labels from the sample-header row (row25)
+    const headerRow=rows[24]||[];
+    const labels=[];
+    headerRow.forEach(v=>{
+      const vv=String(v||"").trim();
+      if(vv && vv.length<=6 && !labels.includes(vv)) labels.push(vv);
+    });
+    const finalLabels = labels.length>0 ? labels : ["จุดวัด"];
+    const reps = finalLabels.map(()=>3); // sensible default, adjustable later
+
+    items.push({
+      no:parseInt(m[1]),
+      name, rank,
+      std_min:vMin, std_max:vMax,
+      meas_labels:finalLabels,
+      meas_reps:reps,
+      meas_na:finalLabels.map(()=>[]),
+      meas_count:finalLabels.length,
+      img:""
+    });
+  });
+  items.sort((a,b)=>a.no-b.no);
+  items.forEach((it,i)=>{ it.no=i+1; });
+  return items;
+}
+
 function parseChecksheetWorkbook(workbook){
+  // Detect X-R Chart export: many sheets named like "1.ITEM NAME"
+  const xrSheets=workbook.SheetNames.filter(sn=>/^\d+\..+/.test(sn));
+  if(xrSheets.length>=3){
+    const items=parseXRChartWorkbook(workbook);
+    if(items.length>0) return items;
+  }
+
   const sheetName=workbook.SheetNames[0];
   const ws=workbook.Sheets[sheetName];
   const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null,raw:false});
@@ -757,6 +836,7 @@ function parseChecksheetWorkbook(workbook){
   if(items.length===0) items=parseFormatB(rows);
   return items;
 }
+
 
 let importedItems = null;
 
