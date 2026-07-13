@@ -588,11 +588,9 @@ function rankFromText(text){
   return "MEDIUM";
 }
 
-function parseChecksheetWorkbook(workbook){
-  const sheetName=workbook.SheetNames[0];
-  const ws=workbook.Sheets[sheetName];
-  const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null,raw:false});
-
+// Format A: one row per item, Result column holds side label + numbered
+// sample list as a single text blob (e.g. "ซ้าย(LH)\n1.\n2.\n3.")
+function parseFormatA(rows){
   const items=[];
   let itemNo=1;
   rows.forEach(row=>{
@@ -625,6 +623,111 @@ function parseChecksheetWorkbook(workbook){
       img:""
     });
   });
+  return items;
+}
+
+// Format B: multi-row block per item. First row of the block has
+// No. / Item Name / Rank / Std Min / Std Max / side labels (RH,LH or
+// FRONT,REAR as short column headers, or a combined numbered blob when
+// there's no left-right split). Sample count is read either from the
+// header blob or by counting "N." placeholder lines in the block's rows.
+function parseFormatB(rows){
+  const startRows=[];
+  for(let r=0;r<rows.length;r++){
+    const row=rows[r]||[];
+    const noRaw=row[1], nameRaw=row[2];
+    if(noRaw!=null && nameRaw && /^\d+$/.test(String(noRaw).trim())){
+      startRows.push(r);
+    }
+  }
+  if(startRows.length===0) return [];
+
+  const countInCol=(r0,r1,c)=>{
+    if(c==null) return 0;
+    let n=0;
+    for(let rr=r0;rr<r1;rr++){
+      const cell=(rows[rr]||[])[c];
+      if(cell!=null && /^\s*\d+\s*\./.test(String(cell))) n++;
+    }
+    return n||1;
+  };
+
+  const items=[];
+  for(let i=0;i<startRows.length;i++){
+    const r0=startRows[i];
+    const r1=(i+1<startRows.length)?startRows[i+1]:Math.min(rows.length,r0+30);
+    const headerRow=rows[r0]||[];
+    const name=String(headerRow[2]||"").replace(/\n+/g," ").replace(/\s+/g," ").trim();
+    if(!name) continue;
+
+    let rank="MEDIUM";
+    for(let c=10;c<25;c++){
+      const v=String(headerRow[c]||"");
+      if(/HIGH/i.test(v)){rank="HIGH";break;}
+      if(/MEDIUM/i.test(v)){rank="MEDIUM";break;}
+      if(/LOW/i.test(v)){rank="LOW";break;}
+    }
+
+    const nums=[];
+    for(let c=10;c<28 && nums.length<2;c++){
+      const raw=headerRow[c];
+      if(raw==null) continue;
+      const s=String(raw).trim();
+      if(/^\d+(\.\d+)?$/.test(s)) nums.push(parseFloat(s));
+    }
+    if(nums.length<2) continue; // couldn't find a Std Min/Max pair, skip row
+    const stdMin=nums[0], stdMax=nums[1];
+
+    const labelCols={};
+    headerRow.forEach((v,c)=>{
+      const vv=String(v||"").trim();
+      if(/^RH$|^ขวา$/i.test(vv)) labelCols.RH=c;
+      else if(/^LH$|^ซ้าย$/i.test(vv)) labelCols.LH=c;
+      else if(/^FRONT$|^หน้า$/i.test(vv)) labelCols.FRONT=c;
+      else if(/^REAR$|^หลัง$/i.test(vv)) labelCols.REAR=c;
+    });
+
+    let labels=[], reps=[];
+    if(labelCols.RH!=null || labelCols.LH!=null){
+      const n=Math.max(countInCol(r0,r1,labelCols.RH), countInCol(r0,r1,labelCols.LH));
+      labels=["RH","LH"]; reps=[n,n];
+    }else if(labelCols.FRONT!=null || labelCols.REAR!=null){
+      const n=Math.max(countInCol(r0,r1,labelCols.FRONT), countInCol(r0,r1,labelCols.REAR));
+      labels=["FRONT","REAR"]; reps=[n,n];
+    }else{
+      let blobCol=-1, blobCount=0;
+      for(let c=10;c<headerRow.length;c++){
+        const v=String(headerRow[c]||"");
+        const m=v.match(/\d+\s*\./g);
+        if(m && m.length>blobCount){ blobCount=m.length; blobCol=c; }
+      }
+      labels=["จุดวัด"];
+      reps=[blobCount>0?blobCount:1];
+    }
+
+    items.push({
+      no:items.length+1,
+      name,
+      rank,
+      std_min:stdMin,
+      std_max:stdMax,
+      meas_labels:labels,
+      meas_reps:reps,
+      meas_na:labels.map(()=>[]),
+      meas_count:labels.length,
+      img:""
+    });
+  }
+  return items;
+}
+
+function parseChecksheetWorkbook(workbook){
+  const sheetName=workbook.SheetNames[0];
+  const ws=workbook.Sheets[sheetName];
+  const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null,raw:false});
+
+  let items=parseFormatA(rows);
+  if(items.length===0) items=parseFormatB(rows);
   return items;
 }
 
