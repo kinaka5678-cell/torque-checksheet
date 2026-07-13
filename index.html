@@ -577,7 +577,7 @@ function detectLabelsAndReps(text){
 
 function countReps(text){
   const s=String(text||"");
-  const matches=s.match(/(^|\n)\s*\d+\s*\./gm);
+  const matches=s.match(/(?:^|\s)\d{1,2}\s*\.(?!\d)/gm);
   return matches && matches.length>0 ? matches.length : 1;
 }
 
@@ -588,8 +588,28 @@ function rankFromText(text){
   return "MEDIUM";
 }
 
-// Format A: one row per item, Result column holds side label + numbered
-// sample list as a single text blob (e.g. "ซ้าย(LH)\n1.\n2.\n3.")
+// Detects a short label from a result-column's text. Falls back to the
+// given default if no recognizable keyword is found (e.g. combined
+// front+rear text under one physical side, or a custom label like
+// "ด้านเบาะคนขับ" which isn't a standard direction word).
+function labelForColumn(text, fallback){
+  const s=String(text||"");
+  if(/LH|ซ้าย/i.test(s)) return "LH";
+  if(/RH|ขวา/i.test(s)) return "RH";
+  if(/FRONT|หน้า/i.test(s)) return "FRONT";
+  if(/REAR|หลัง/i.test(s)) return "REAR";
+  const firstLine=s.split("\n").map(l=>l.replace(/\s+/g," ").trim()).find(l=>l && !/^\d+\s*\./.test(l));
+  if(firstLine && firstLine.length<=60) return firstLine;
+  return fallback;
+}
+
+// Format A: one row per item. Two independent result columns hold the
+// left-side group (col R) and right-side group (col V) - each column
+// is parsed on its own (own label, own sample count), rather than
+// assumed to mirror each other. A column may combine multiple physical
+// positions under one continuous numbered list (e.g. "หน้าซ้าย...1...
+// หลังซ้าย...2...3..."), which is handled naturally since we just count
+// "N." occurrences in that column's text.
 function parseFormatA(rows){
   const items=[];
   let itemNo=1;
@@ -598,7 +618,8 @@ function parseFormatA(rows){
     const rankRaw=row[11];     // column L
     const minRaw=row[13];      // column N
     const maxRaw=row[15];      // column P
-    const resultRaw=row[17];   // column R
+    const leftRaw=row[17];     // column R
+    const rightRaw=row[21];    // column V
 
     if(!nameRaw) return;
     const minVal=parseNumFromCell(minRaw);
@@ -608,7 +629,13 @@ function parseFormatA(rows){
     const name=String(nameRaw).replace(/\n+/g," ").replace(/\s+/g," ").trim();
     if(!name) return;
 
-    const {labels,reps}=detectLabelsAndReps(resultRaw);
+    const hasLeft = leftRaw!=null && String(leftRaw).trim()!=="";
+    const hasRight = rightRaw!=null && String(rightRaw).trim()!=="";
+
+    const labels=[], reps=[];
+    if(hasLeft){ labels.push(labelForColumn(leftRaw,"LH")); reps.push(countReps(leftRaw)); }
+    if(hasRight){ labels.push(labelForColumn(rightRaw,"RH")); reps.push(countReps(rightRaw)); }
+    if(!hasLeft && !hasRight){ labels.push("จุดวัด"); reps.push(1); }
 
     items.push({
       no:itemNo++,
