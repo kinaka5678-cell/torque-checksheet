@@ -730,6 +730,12 @@ function parseFormatB(rows){
   }
   if(startRows.length===0) return [];
 
+  const rawMatchCount=(text)=>{
+    const s=String(text||"");
+    const m=s.match(/(?:^|\s)\d{1,2}\s*\.(?!\d)/gm);
+    return m?m.length:0;
+  };
+
   const countInCol=(r0,r1,c)=>{
     if(c==null||c<0) return 0;
     let best=0;
@@ -739,11 +745,29 @@ function parseFormatB(rows){
       let n=0;
       for(let rr=r0;rr<r1;rr++){
         const cell=(rows[rr]||[])[cc];
-        if(cell!=null && /^\s*\d{1,2}\s*\./.test(String(cell))) n++;
+        if(cell!=null) n+=rawMatchCount(cell);
       }
       best=Math.max(best,n);
     }
     return best;
+  };
+
+  // For items without an RH/LH/FRONT/REAR label, find whichever column in
+  // the block has the most "N." sample markers (blob-in-one-cell or spread
+  // across rows, both counted) and use that as the sample count.
+  const findDefaultRepsCount=(r0,r1,skipCols)=>{
+    let bestCount=0;
+    const ncols=Math.max(...rows.slice(r0,r1).map(row=>(row?row.length:0)));
+    for(let c=0;c<ncols;c++){
+      if(skipCols.has(c)) continue;
+      let total=0;
+      for(let rr=r0;rr<r1;rr++){
+        const cell=(rows[rr]||[])[c];
+        if(cell!=null) total+=rawMatchCount(cell);
+      }
+      if(total>bestCount) bestCount=total;
+    }
+    return bestCount;
   };
 
   const items=[];
@@ -799,7 +823,9 @@ function parseFormatB(rows){
       const n=Math.max(countInCol(r0,r1,labelCols.FRONT), countInCol(r0,r1,labelCols.REAR));
       labels=["FRONT","REAR"]; reps=[n||1,n||1];
     }else{
-      labels=["จุดวัด"]; reps=[1];
+      const skipCols=new Set([nameCol,minCol,maxCol]);
+      const n=findDefaultRepsCount(r0,r1,skipCols);
+      labels=["จุดวัด"]; reps=[n>0?n:1];
     }
 
     items.push({
@@ -898,13 +924,21 @@ function parseChecksheetWorkbook(workbook){
     if(items.length>0) return items;
   }
 
-  const sheetName=workbook.SheetNames[0];
-  const ws=workbook.Sheets[sheetName];
-  const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null,raw:false});
+  // Otherwise, this may be a multi-sheet checksheet (e.g. one sheet per
+  // page/table) - parse EVERY sheet and combine all items found.
+  const allItems=[];
+  workbook.SheetNames.forEach(sheetName=>{
+    const ws=workbook.Sheets[sheetName];
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null,raw:false});
 
-  let items=parseFormatA(rows);
-  if(items.length===0) items=parseFormatB(rows);
-  return items;
+    let items=parseFormatA(rows);
+    if(items.length===0) items=parseFormatB(rows);
+    allItems.push(...items);
+  });
+
+  // Renumber sequentially across all sheets combined
+  allItems.forEach((it,i)=>{ it.no=i+1; });
+  return allItems;
 }
 
 
