@@ -782,22 +782,25 @@ function parseFormatB(rows){
     return extractNaFlags(combined.join("\n"));
   };
 
-  // For items without an RH/LH/FRONT/REAR label, find whichever column in
-  // the block has the most "N." sample markers (blob-in-one-cell or spread
-  // across rows, both counted) and use that as the sample count.
+  // For items without an RH/LH/FRONT/REAR label, some sheets split the
+  // numbered samples across TWO side-by-side columns (e.g. 1,2,3 on the
+  // left and 4,5,6 on the right) instead of one single column. Sum
+  // matches across ALL non-skip columns in the block so nothing is missed.
   const findDefaultRepsCol=(r0,r1,skipCols)=>{
-    let bestCount=0, bestCol=-1;
+    let total=0;
+    const naTexts=[];
     const ncols=Math.max(...rows.slice(r0,r1).map(row=>(row?row.length:0)));
     for(let c=0;c<ncols;c++){
       if(skipCols.has(c)) continue;
-      let total=0;
       for(let rr=r0;rr<r1;rr++){
         const cell=(rows[rr]||[])[c];
-        if(cell!=null) total+=rawMatchCount(cell);
+        if(cell!=null && rawMatchCount(cell)>0){
+          total+=rawMatchCount(cell);
+          naTexts.push(String(cell));
+        }
       }
-      if(total>bestCount){ bestCount=total; bestCol=c; }
     }
-    return {count:bestCount,col:bestCol};
+    return {count:total, naText:naTexts.join("\n")};
   };
 
   const items=[];
@@ -866,7 +869,7 @@ function parseFormatB(rows){
       const skipCols=new Set([nameCol,minCol,maxCol]);
       const def=findDefaultRepsCol(r0,r1,skipCols);
       labels=["จุดวัด"]; reps=[def.count>0?def.count:1];
-      naFlags=[naFlagsForRowSpreadCol(r0,r1,def.col)];
+      naFlags=[extractNaFlags(def.naText)];
     }
 
     items.push({
