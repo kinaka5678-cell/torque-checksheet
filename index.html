@@ -607,6 +607,23 @@ function countReps(text){
   return matches && matches.length>0 ? matches.length : 1;
 }
 
+// Splits text at each "N." sample marker and checks whether the segment
+// following that marker contains the word "ติด" (stuck/can't-inspect).
+// Returns an array of booleans in sample order, e.g. [false,false,true,...]
+function extractNaFlags(text){
+  const s=String(text||"");
+  const re=/(?:^|\s)(\d{1,2})\s*\.(?!\d)/gm;
+  const matches=[...s.matchAll(re)];
+  if(matches.length===0) return [];
+  const flags=[];
+  for(let i=0;i<matches.length;i++){
+    const start=matches[i].index+matches[i][0].length;
+    const end=(i+1<matches.length)?matches[i+1].index:s.length;
+    flags.push(/ติด/.test(s.slice(start,end)));
+  }
+  return flags;
+}
+
 function rankFromText(text){
   const s=String(text||"").toLowerCase();
   if(s.includes("high")) return "HIGH";
@@ -737,8 +754,8 @@ function parseFormatB(rows){
   };
 
   const countInCol=(r0,r1,c)=>{
-    if(c==null||c<0) return 0;
-    let best=0;
+    if(c==null||c<0) return {count:0,col:c};
+    let best=0, bestCol=c;
     for(let dc=-1;dc<=1;dc++){
       const cc=c+dc;
       if(cc<0) continue;
@@ -747,16 +764,29 @@ function parseFormatB(rows){
         const cell=(rows[rr]||[])[cc];
         if(cell!=null) n+=rawMatchCount(cell);
       }
-      best=Math.max(best,n);
+      if(n>best){ best=n; bestCol=cc; }
     }
-    return best;
+    return {count:best,col:bestCol};
+  };
+
+  // Extract ติด flags for a column that's spread across multiple rows
+  // (one sample number per row) - concatenate row texts in order, then
+  // split by sample marker.
+  const naFlagsForRowSpreadCol=(r0,r1,c)=>{
+    if(c==null||c<0) return [];
+    const combined=[];
+    for(let rr=r0;rr<r1;rr++){
+      const cell=(rows[rr]||[])[c];
+      if(cell!=null && rawMatchCount(cell)>0) combined.push(String(cell));
+    }
+    return extractNaFlags(combined.join("\n"));
   };
 
   // For items without an RH/LH/FRONT/REAR label, find whichever column in
   // the block has the most "N." sample markers (blob-in-one-cell or spread
   // across rows, both counted) and use that as the sample count.
-  const findDefaultRepsCount=(r0,r1,skipCols)=>{
-    let bestCount=0;
+  const findDefaultRepsCol=(r0,r1,skipCols)=>{
+    let bestCount=0, bestCol=-1;
     const ncols=Math.max(...rows.slice(r0,r1).map(row=>(row?row.length:0)));
     for(let c=0;c<ncols;c++){
       if(skipCols.has(c)) continue;
@@ -765,9 +795,9 @@ function parseFormatB(rows){
         const cell=(rows[rr]||[])[c];
         if(cell!=null) total+=rawMatchCount(cell);
       }
-      if(total>bestCount) bestCount=total;
+      if(total>bestCount){ bestCount=total; bestCol=c; }
     }
-    return bestCount;
+    return {count:bestCount,col:bestCol};
   };
 
   const items=[];
@@ -815,17 +845,28 @@ function parseFormatB(rows){
       });
     });
 
-    let labels=[], reps=[];
+    let labels=[], reps=[], naFlags=[];
     if(labelCols.RH!=null || labelCols.LH!=null){
-      const n=Math.max(countInCol(r0,r1,labelCols.RH), countInCol(r0,r1,labelCols.LH));
+      const rhR=countInCol(r0,r1,labelCols.RH), lhR=countInCol(r0,r1,labelCols.LH);
+      const n=Math.max(rhR.count, lhR.count);
       labels=["RH","LH"]; reps=[n||1,n||1];
+      naFlags=[
+        naFlagsForRowSpreadCol(r0,r1,rhR.col),
+        naFlagsForRowSpreadCol(r0,r1,lhR.col)
+      ];
     }else if(labelCols.FRONT!=null || labelCols.REAR!=null){
-      const n=Math.max(countInCol(r0,r1,labelCols.FRONT), countInCol(r0,r1,labelCols.REAR));
+      const frR=countInCol(r0,r1,labelCols.FRONT), rrR=countInCol(r0,r1,labelCols.REAR);
+      const n=Math.max(frR.count, rrR.count);
       labels=["FRONT","REAR"]; reps=[n||1,n||1];
+      naFlags=[
+        naFlagsForRowSpreadCol(r0,r1,frR.col),
+        naFlagsForRowSpreadCol(r0,r1,rrR.col)
+      ];
     }else{
       const skipCols=new Set([nameCol,minCol,maxCol]);
-      const n=findDefaultRepsCount(r0,r1,skipCols);
-      labels=["จุดวัด"]; reps=[n>0?n:1];
+      const def=findDefaultRepsCol(r0,r1,skipCols);
+      labels=["จุดวัด"]; reps=[def.count>0?def.count:1];
+      naFlags=[naFlagsForRowSpreadCol(r0,r1,def.col)];
     }
 
     items.push({
@@ -836,7 +877,7 @@ function parseFormatB(rows){
       std_max:stdMax,
       meas_labels:labels,
       meas_reps:reps,
-      meas_na:labels.map(()=>[]),
+      meas_na:naFlags,
       meas_count:labels.length,
       img:""
     });
