@@ -535,7 +535,7 @@ document.getElementById("btn-model-confirm").addEventListener("click", () => {
       const src = models.find(x=>x.id===copyFrom);
       if (src) items = JSON.parse(JSON.stringify(src.items||[]));
     }
-    const newId = "model_" + (nextModelId++);
+    const newId = "model_" + Date.now() + "_" + Math.random().toString(36).slice(2,8);
     models.push({id:newId, name, desc:document.getElementById("m-desc").value.trim(), icon:selectedEmoji, items});
   }
   importedItems=null;
