@@ -188,6 +188,28 @@ html,body{background:var(--paper);color:var(--ink);font-family:-apple-system,'Se
 .action-btn.ghost{background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.2);}
 .save-status{font-family:monospace;font-size:10px;color:#93A2B3;}
 .save-status.saved{color:var(--ok-fg);}
+#print-report{display:none;}
+.pr-header{text-align:center;margin-bottom:16px;}
+.pr-header h1{font-size:18px;margin:0 0 4px;}
+.pr-header p{font-size:11px;color:#555;margin:0;}
+.pr-meta{display:flex;flex-wrap:wrap;gap:6px 24px;font-size:11px;margin:14px 0;padding:10px 14px;border:1px solid #999;border-radius:6px;}
+.pr-meta b{margin-right:4px;}
+.pr-summary{display:flex;gap:14px;margin-bottom:14px;font-size:12px;}
+.pr-summary .pr-box{flex:1;text-align:center;border:1px solid #999;border-radius:6px;padding:8px;}
+.pr-summary .pr-box .num{font-size:20px;font-weight:800;display:block;}
+table.pr-table{width:100%;border-collapse:collapse;font-size:10.5px;}
+table.pr-table th,table.pr-table td{border:1px solid #888;padding:4px 6px;text-align:left;vertical-align:top;}
+table.pr-table th{background:#eee;}
+table.pr-table td.center{text-align:center;}
+.pr-judge-OK{color:#0a7a2e;font-weight:700;}
+.pr-judge-NG{color:#b30000;font-weight:700;}
+.pr-judge-PENDING{color:#888;}
+@media print{
+  body *{visibility:hidden;}
+  #print-report, #print-report *{visibility:visible;}
+  #print-report{display:block;position:absolute;top:0;left:0;width:100%;}
+  @page{margin:12mm;}
+}
 </style>
 </head>
 <body>
@@ -245,6 +267,7 @@ html,body{background:var(--paper);color:var(--ink);font-family:-apple-system,'Se
   <div class="action-bar">
     <span class="save-status" id="save-status">● ยังไม่บันทึก</span>
     <button class="action-btn ghost" id="btn-clear">ล้าง</button>
+    <button class="action-btn ghost" id="btn-report">🖨️ สรุปผล/พิมพ์</button>
     <button class="action-btn ghost" id="btn-export">Export CSV</button>
     <button class="action-btn primary" id="btn-save">บันทึก</button>
   </div>
@@ -255,6 +278,9 @@ html,body{background:var(--paper);color:var(--ink);font-family:-apple-system,'Se
   <span class="lb-close" id="lb-close">&times;</span>
   <img id="lb-img" src="" alt="">
 </div>
+
+<!-- PRINT-ONLY SUMMARY REPORT (hidden on screen, shown only when printing) -->
+<div id="print-report"></div>
 
 <!-- ITEM EDIT MODAL -->
 <div class="modal-backdrop" id="item-modal-backdrop">
@@ -1466,6 +1492,70 @@ function formatDate(iso){
   const[y,m,d]=iso.split("-");
   return`${parseInt(d)}/${parseInt(m)}/${y}`;
 }
+
+document.getElementById("btn-report").addEventListener("click",()=>{
+  let okCount=0, ngCount=0, pendingCount=0;
+  const sortedItems=currentItems.slice().sort((a,b)=>a.no-b.no);
+
+  const rowsHtml=sortedItems.map(item=>{
+    const r=state.results[item.no]||{};
+    const judge=r.judge||"PENDING";
+    if(judge==="OK")okCount++; else if(judge==="NG")ngCount++; else pendingCount++;
+    const labels=item.meas_labels||["RH","LH"];
+    const meas2d=r.meas2d||[];
+    const na2d=r.na2d||[];
+    const valuesText=labels.map((lbl,li)=>{
+      const vals=(meas2d[li]||[]).map((v,ri)=>{
+        if(na2d[li]&&na2d[li][ri]) return "ติด";
+        return v!=null?v:"—";
+      });
+      return `${lbl}: ${vals.join(", ")}`;
+    }).join(" / ");
+    const judgeClass="pr-judge-"+judge;
+    const judgeText=judge==="OK"?"OK":judge==="NG"?"NG":"รอตรวจ";
+    return `<tr>
+      <td class="center">${item.no}</td>
+      <td>${item.name}</td>
+      <td class="center">${item.rank}</td>
+      <td class="center">${item.std_min}–${item.std_max}</td>
+      <td>${valuesText}</td>
+      <td class="center">${r.xbar!=null?r.xbar.toFixed(2):"—"}</td>
+      <td class="center">${r.range!=null?r.range.toFixed(2):"—"}</td>
+      <td class="center ${judgeClass}">${judgeText}</td>
+    </tr>`;
+  }).join("");
+
+  const html=`
+    <div class="pr-header">
+      <h1>🔧 Torque Check Sheet — สรุปผลการตรวจสอบ</h1>
+      <p>Hino QA — Digital Tightening Torque Inspection</p>
+    </div>
+    <div class="pr-meta">
+      <div><b>Model:</b> ${state.meta.model||"—"}</div>
+      <div><b>Date:</b> ${formatDate(state.meta.date)||"—"}</div>
+      <div><b>Frame No:</b> ${state.meta.frame||"—"}</div>
+      <div><b>Engine No:</b> ${state.meta.engine||"—"}</div>
+      <div><b>Lot / Unit:</b> ${state.meta.lot||"—"}</div>
+      <div><b>Auditor:</b> ${state.meta.auditor||"—"}</div>
+      <div><b>พิมพ์เมื่อ:</b> ${new Date().toLocaleString("th-TH")}</div>
+    </div>
+    <div class="pr-summary">
+      <div class="pr-box"><span class="num">${sortedItems.length}</span>จุดตรวจทั้งหมด</div>
+      <div class="pr-box"><span class="num pr-judge-OK">${okCount}</span>OK</div>
+      <div class="pr-box"><span class="num pr-judge-NG">${ngCount}</span>NG</div>
+      <div class="pr-box"><span class="num pr-judge-PENDING">${pendingCount}</span>รอตรวจ</div>
+    </div>
+    <table class="pr-table">
+      <thead><tr>
+        <th>No.</th><th>จุดตรวจ</th><th>Rank</th><th>Std (N·m)</th>
+        <th>ค่าที่วัดได้</th><th>X̄</th><th>R</th><th>ผล</th>
+      </tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>`;
+
+  document.getElementById("print-report").innerHTML=html;
+  window.print();
+});
 
 document.getElementById("btn-export").addEventListener("click",()=>{
   const header=["Date","Frame_No","Engine_No","Lot_No","Auditor","Model","Item_No","Item_Name","Std_Min","Std_Max","Side"];
