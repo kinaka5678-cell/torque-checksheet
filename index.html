@@ -64,6 +64,10 @@ html,body{background:var(--paper);color:var(--ink);font-family:'Inter','Sarabun'
 
 /* ── PROGRESS ── */
 .progress-wrap{background:var(--card);border-bottom:1px solid var(--line);padding:9px 14px;position:relative;z-index:49;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.search-bar{background:var(--card);border-bottom:1px solid var(--line);padding:9px 14px;display:flex;align-items:center;gap:8px;}
+.search-bar input{flex:1;padding:9px 12px;border:1.5px solid var(--line);border-radius:8px;font-size:14px;font-family:inherit;background:#F7F6F2;}
+.search-bar input:focus{outline:none;border-color:var(--steel);background:#fff;}
+.search-bar button{border:none;background:var(--line);color:var(--ink-soft);width:32px;height:32px;border-radius:8px;font-size:14px;cursor:pointer;flex-shrink:0;}
 .progress-track{flex:1;height:8px;background:var(--line);border-radius:6px;overflow:hidden;min-width:60px;}
 .progress-fill{height:100%;background:linear-gradient(90deg,var(--low),var(--ok-fg));border-radius:6px;transition:width .3s;width:0%;}
 .progress-text{font-family:monospace;font-size:12px;font-weight:700;color:var(--ink);white-space:nowrap;}
@@ -260,6 +264,10 @@ table.pr-table td.center{text-align:center;}
       <span class="pill ng-pill" id="stat-ng">NG 0</span>
       <span class="pill pending-pill" id="stat-pending">รอ 0</span>
     </div>
+  </div>
+  <div class="search-bar">
+    <input type="text" id="item-search" placeholder="🔍 ค้นหาจุดตรวจ (ชื่อหรือเลขจุด)">
+    <button id="btn-clear-search" style="display:none;">✕</button>
   </div>
   <div class="filter-bar">
     <button class="filter-btn active" data-filter="ALL">ทั้งหมด (<span id="total-count">0</span>)</button>
@@ -1144,6 +1152,7 @@ function renderItems() {
       </div>`;
     list.appendChild(card);
   });
+  if(typeof applyFiltersAndSearch==="function") applyFiltersAndSearch();
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1297,21 +1306,44 @@ function adjustMeasReps(item, li, delta){
   markUnsaved();
 }
 
-// Filter
+// Filter + Search (combined)
+let currentRankFilter="ALL";
+
+function applyFiltersAndSearch(){
+  const query=document.getElementById("item-search").value.trim().toLowerCase();
+  document.querySelectorAll(".item-card").forEach(card=>{
+    const no=parseInt(card.dataset.no);
+    const rank=card.dataset.rank;
+    const j=(state.results[no]||{}).judge||"PENDING";
+    const rankOk=currentRankFilter==="ALL"||(currentRankFilter==="HIGH"&&rank==="HIGH")||(currentRankFilter==="MEDIUM"&&rank==="MEDIUM")||
+               (currentRankFilter==="LOW"&&rank==="LOW")||(currentRankFilter==="PENDING_ONLY"&&j==="PENDING")||(currentRankFilter==="NG_ONLY"&&j==="NG");
+    let searchOk=true;
+    if(query){
+      const nameEl=card.querySelector(".item-name");
+      const name=(nameEl?nameEl.textContent:"").toLowerCase();
+      searchOk = name.includes(query) || String(no).includes(query);
+    }
+    card.classList.toggle("hidden-item", !(rankOk && searchOk));
+  });
+}
+
 document.querySelector(".filter-bar").addEventListener("click",e=>{
   const btn=e.target.closest(".filter-btn");
   if(!btn||btn.id==="btn-add-item")return;
   document.querySelectorAll(".filter-btn").forEach(b=>b.classList.remove("active"));
   btn.classList.add("active");
-  const f=btn.dataset.filter;
-  document.querySelectorAll(".item-card").forEach(card=>{
-    const no=parseInt(card.dataset.no);
-    const rank=card.dataset.rank;
-    const j=(state.results[no]||{}).judge||"PENDING";
-    const show=f==="ALL"||(f==="HIGH"&&rank==="HIGH")||(f==="MEDIUM"&&rank==="MEDIUM")||
-               (f==="LOW"&&rank==="LOW")||(f==="PENDING_ONLY"&&j==="PENDING")||(f==="NG_ONLY"&&j==="NG");
-    card.classList.toggle("hidden-item",!show);
-  });
+  currentRankFilter=btn.dataset.filter;
+  applyFiltersAndSearch();
+});
+
+document.getElementById("item-search").addEventListener("input",e=>{
+  document.getElementById("btn-clear-search").style.display = e.target.value ? "block" : "none";
+  applyFiltersAndSearch();
+});
+document.getElementById("btn-clear-search").addEventListener("click",()=>{
+  document.getElementById("item-search").value="";
+  document.getElementById("btn-clear-search").style.display="none";
+  applyFiltersAndSearch();
 });
 
 // Meta fields
