@@ -124,6 +124,8 @@ html,body{background:var(--paper);color:var(--ink);font-family:'Inter','Sarabun'
 
 /* Measurement groups */
 .meas-group{border:1px solid var(--line);border-radius:7px;overflow:hidden;margin-bottom:2px;}
+.meas-groups-grid{display:grid;grid-template-columns:repeat(var(--group-count,1),1fr);gap:8px;}
+@media(max-width:420px){.meas-groups-grid{grid-template-columns:1fr;}}
 .meas-group-header{background:#F7F6F2;padding:6px 10px;font-size:14px;font-weight:700;color:var(--steel);display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--line);}
 .meas-group-inputs{padding:6px 8px;display:flex;flex-direction:column;gap:4px;}
 .meas-row{display:flex;align-items:center;gap:6px;}
@@ -1122,6 +1124,8 @@ function renderItems() {
         </div>`;
     });
 
+    const groupsHtmlWrapped = `<div class="meas-groups-grid" style="--group-count:${labels.length};">${groupsHtml}</div>`;
+
     const imgHtml = item.img
       ? `<img src="${item.img}" loading="lazy" alt="">`
       : `<span style="padding:10px;text-align:center;font-size:10px;color:var(--ink-soft);">ไม่มีรูป</span>`;
@@ -1140,7 +1144,7 @@ function renderItems() {
       <div class="item-body">
         <div class="item-img-wrap ${item.img?'':'no-img'}" data-img="${item.img||''}">${imgHtml}${item.img?'<span class="zoom-hint">🔍 แตะเพื่อขยาย</span>':''}</div>
         <div class="item-controls">
-          ${groupsHtml}
+          ${groupsHtmlWrapped}
           <div class="result-row">
             <div class="xr-display">
               <span>X̄ <b class="xbar-val">—</b></span>
