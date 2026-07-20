@@ -1106,7 +1106,7 @@ function renderItems() {
           <div class="meas-row">
             <span class="rep-label">${repCount>1 ? (ri+1)+"." : ""}</span>
             <input type="number" inputmode="decimal" step="0.1"
-                   data-li="${li}" data-ri="${ri}" placeholder="—" ${isNa?"disabled":""}>
+                   data-li="${li}" data-ri="${ri}" placeholder="${isNa?"ติด":"—"}" ${isNa?"disabled":""}>
             <span class="unit-label">N·m</span>
             <label class="na-toggle">
               <input type="checkbox" class="na-check" data-li="${li}" data-ri="${ri}" ${isNa?"checked":""}>
@@ -1252,6 +1252,7 @@ function attachListeners() {
         const pairedInput=card.querySelector(`.meas-row input[type="number"][data-li="${li}"][data-ri="${ri}"]`);
         if(pairedInput){
           pairedInput.disabled=chk.checked;
+          pairedInput.placeholder=chk.checked?"ติด":"—";
           if(chk.checked) pairedInput.value="";
         }
         updateCard(card,item);
@@ -1599,6 +1600,7 @@ function restoreResults() {
       const pairedInput=card.querySelector(`.meas-row input[type="number"][data-li="${li}"][data-ri="${ri}"]`);
       if(pairedInput){
         pairedInput.disabled=isNa;
+        pairedInput.placeholder=isNa?"ติด":"—";
         if(isNa)pairedInput.value="";
       }
     });
