@@ -134,6 +134,9 @@ html,body{background:var(--paper);color:var(--ink);font-family:'Inter','Sarabun'
 .meas-row input:focus{outline:none;border-color:var(--accent);}
 .meas-row input.val-ok{border-color:var(--low);background:#EFF8F1;color:var(--ok-bg);}
 .meas-row input.val-ng{border-color:var(--high);background:#FBEFEE;color:var(--ng-bg);font-weight:700;}
+.clamp-btn{display:none;border:none;background:var(--high);color:#fff;font-size:9px;font-weight:800;padding:0 6px;height:24px;border-radius:5px;cursor:pointer;white-space:nowrap;flex-shrink:0;}
+.clamp-btn:hover{background:#A02A22;}
+.meas-row input.val-ng ~ .clamp-btn{display:inline-flex;align-items:center;}
 .unit-label{font-size:10px;color:var(--ink-soft);width:26px;}
 .meas-add-row{border:none;border-top:1px dashed var(--line);background:#F0EDE6;color:var(--steel);font-size:10px;font-weight:700;padding:6px;cursor:pointer;width:100%;letter-spacing:.02em;}
 .meas-add-row:hover{background:#E8E4DB;}
@@ -173,6 +176,14 @@ html,body{background:var(--paper);color:var(--ink);font-family:'Inter','Sarabun'
 .meas-config{border:1.5px solid var(--line);border-radius:8px;padding:10px;}
 .meas-config-title{font-size:10px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;margin-bottom:8px;}
 .meas-config-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:7px;padding-bottom:7px;border-bottom:1px solid var(--line);}
+.slot-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;background:#F9F8F5;}
+.slot-item-info{flex:1;min-width:0;}
+.slot-item-name{font-weight:700;font-size:13px;color:var(--ink);}
+.slot-item-meta{font-size:10px;color:var(--ink-soft);margin-top:2px;}
+.slot-item button{border:none;border-radius:6px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;}
+.slot-btn-load{background:var(--steel);color:#fff;}
+.slot-btn-del{background:#F3E4E2;color:var(--high);}
+.slot-empty{text-align:center;color:var(--ink-soft);font-size:12px;padding:20px 0;}
 .meas-config-row:last-child{margin-bottom:0;padding-bottom:0;border-bottom:none;}
 .meas-config-row .lbl-inp{flex:1;padding:6px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:12px;}
 .meas-config-row .rep-inp{width:54px;padding:6px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:12px;text-align:center;}
@@ -284,9 +295,25 @@ table.pr-table td.center{text-align:center;}
   <div class="action-bar">
     <span class="save-status" id="save-status">● ยังไม่บันทึก</span>
     <button class="action-btn ghost" id="btn-clear">ล้าง</button>
+    <button class="action-btn ghost" id="btn-slots">💾 Save Slots</button>
     <button class="action-btn ghost" id="btn-report">🖨️ สรุปผล/พิมพ์</button>
     <button class="action-btn ghost" id="btn-export">Export CSV</button>
     <button class="action-btn primary" id="btn-save">บันทึก</button>
+  </div>
+</div>
+
+<!-- SAVE SLOTS MODAL -->
+<div class="modal-backdrop" id="slots-modal-backdrop">
+  <div class="modal">
+    <div class="modal-head">
+      <span>💾 Save Slots</span>
+      <span class="modal-close" id="slots-modal-close">&times;</span>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:12px;color:var(--ink-soft);margin:0 0 12px;">บันทึกความคืบหน้าปัจจุบันเป็น Slot ใหม่ หรือโหลด/ลบ Slot ที่เคยบันทึกไว้ สำหรับ Model นี้เท่านั้น</p>
+      <button class="mbtn mbtn-primary" id="btn-slot-save-new" style="width:100%;margin-bottom:14px;">+ บันทึกความคืบหน้าปัจจุบันเป็น Slot ใหม่</button>
+      <div id="slots-list"></div>
+    </div>
   </div>
 </div>
 
@@ -1107,6 +1134,7 @@ function renderItems() {
             <span class="rep-label">${repCount>1 ? (ri+1)+"." : ""}</span>
             <input type="number" inputmode="decimal" step="0.1"
                    data-li="${li}" data-ri="${ri}" placeholder="${isNa?"ติด":"—"}" ${isNa?"disabled":""}>
+            <button type="button" class="clamp-btn" data-li="${li}" data-ri="${ri}" title="ปรับให้อยู่ในช่วง Std">⇥Std</button>
             <span class="unit-label">N·m</span>
             <label class="na-toggle">
               <input type="checkbox" class="na-check" data-li="${li}" data-ri="${ri}" ${isNa?"checked":""}>
@@ -1245,6 +1273,19 @@ function attachListeners() {
     const item=currentItems.find(i=>i.no===no);
     card.querySelectorAll('.meas-row input[type="number"]').forEach(inp=>{
       inp.addEventListener("input",()=>{updateCard(card,item);markUnsaved();});
+    });
+    card.querySelectorAll(".clamp-btn").forEach(btn=>{
+      btn.addEventListener("click",()=>{
+        const li=btn.dataset.li, ri=btn.dataset.ri;
+        const pairedInput=card.querySelector(`.meas-row input[type="number"][data-li="${li}"][data-ri="${ri}"]`);
+        if(!pairedInput) return;
+        const v=parseFloat(pairedInput.value);
+        if(isNaN(v)) return;
+        if(v<item.std_min) pairedInput.value=item.std_min;
+        else if(v>item.std_max) pairedInput.value=item.std_max;
+        updateCard(card,item);
+        markUnsaved();
+      });
     });
     card.querySelectorAll(".na-check").forEach(chk=>{
       chk.addEventListener("change",()=>{
@@ -1620,6 +1661,110 @@ async function saveCurrentModelState(){
   const key=SK+"state_"+currentModelId;
   try{await kv.set(key,JSON.stringify({meta:state.meta,results:state.results}));}catch(e){}
 }
+
+// ══════════════════════════════════════════════════════════════════
+// SAVE SLOTS — named snapshots of progress, separate from the normal
+// auto-save. Lets Audit save a batch of work under a name, Staff load
+// it later to review/judge, and delete it afterward to free up space.
+// ══════════════════════════════════════════════════════════════════
+async function getSlotsIndex(){
+  try{
+    const res=await kv.get(SK+"slots_"+currentModelId);
+    if(res&&res.value) return JSON.parse(res.value);
+  }catch(e){}
+  return [];
+}
+async function setSlotsIndex(list){
+  try{await kv.set(SK+"slots_"+currentModelId, JSON.stringify(list));}catch(e){}
+}
+
+async function renderSlotsList(){
+  const wrap=document.getElementById("slots-list");
+  wrap.innerHTML=`<p class="slot-empty">⏳ กำลังโหลด...</p>`;
+  const slots=await getSlotsIndex();
+  if(slots.length===0){
+    wrap.innerHTML=`<p class="slot-empty">ยังไม่มี Save Slot สำหรับ Model นี้</p>`;
+    return;
+  }
+  slots.sort((a,b)=>b.ts-a.ts);
+  wrap.innerHTML=slots.map(s=>{
+    const dt=new Date(s.ts).toLocaleString("th-TH");
+    return `
+    <div class="slot-item">
+      <div class="slot-item-info">
+        <div class="slot-item-name">${s.name}</div>
+        <div class="slot-item-meta">บันทึกเมื่อ ${dt} · ตรวจแล้ว ${s.done||0}/${s.total||0} จุด</div>
+      </div>
+      <button class="slot-btn-load" data-load="${s.id}">📂 โหลด</button>
+      <button class="slot-btn-del" data-del="${s.id}">🗑️</button>
+    </div>`;
+  }).join("");
+
+  wrap.querySelectorAll("[data-load]").forEach(btn=>{
+    btn.addEventListener("click",async()=>{
+      if(!confirm("โหลด Save Slot นี้? ข้อมูลที่กรอกอยู่ตอนนี้ (ถ้ายังไม่บันทึก) จะถูกแทนที่"))return;
+      const id=btn.dataset.load;
+      try{
+        const res=await kv.get(SK+"slot_"+currentModelId+"_"+id);
+        if(res&&res.value){
+          const d=JSON.parse(res.value);
+          state.meta={...state.meta,...(d.meta||{})};
+          state.results=d.results||{};
+          ["date","model","frame","engine","lot","auditor"].forEach(k=>{
+            const el=document.getElementById("meta-"+k);
+            if(el)el.value=state.meta[k]||"";
+          });
+          renderItems();
+          attachListeners();
+          restoreResults();
+          markUnsaved();
+          document.getElementById("slots-modal-backdrop").classList.remove("show");
+        }
+      }catch(e){alert("โหลดไม่สำเร็จ: "+e.message);}
+    });
+  });
+  wrap.querySelectorAll("[data-del]").forEach(btn=>{
+    btn.addEventListener("click",async()=>{
+      if(!confirm("ลบ Save Slot นี้ถาวร? ไม่สามารถกู้คืนได้"))return;
+      const id=btn.dataset.del;
+      try{
+        await kv.delete(SK+"slot_"+currentModelId+"_"+id);
+        const slots=await getSlotsIndex();
+        await setSlotsIndex(slots.filter(s=>s.id!==id));
+        renderSlotsList();
+      }catch(e){alert("ลบไม่สำเร็จ: "+e.message);}
+    });
+  });
+}
+
+document.getElementById("btn-slots").addEventListener("click",()=>{
+  document.getElementById("slots-modal-backdrop").classList.add("show");
+  renderSlotsList();
+});
+document.getElementById("slots-modal-close").addEventListener("click",()=>{
+  document.getElementById("slots-modal-backdrop").classList.remove("show");
+});
+document.getElementById("slots-modal-backdrop").addEventListener("click",e=>{
+  if(e.target.id==="slots-modal-backdrop") document.getElementById("slots-modal-backdrop").classList.remove("show");
+});
+
+document.getElementById("btn-slot-save-new").addEventListener("click",async()=>{
+  const name=prompt("ตั้งชื่อ Save Slot นี้ (เช่น 'ตรวจรอบเช้า 21/7')");
+  if(!name)return;
+  const id=Date.now()+"_"+Math.random().toString(36).slice(2,8);
+  let done=0;
+  currentItems.forEach(it=>{
+    const r=state.results[it.no];
+    if(r&&r.judge&&r.judge!=="PENDING") done++;
+  });
+  try{
+    await kv.set(SK+"slot_"+currentModelId+"_"+id, JSON.stringify({meta:state.meta,results:state.results}));
+    const slots=await getSlotsIndex();
+    slots.push({id,name:name.trim(),ts:Date.now(),done,total:currentItems.length});
+    await setSlotsIndex(slots);
+    renderSlotsList();
+  }catch(e){alert("บันทึกไม่สำเร็จ: "+e.message);}
+});
 
 async function loadModelState(modelId){
   state={meta:{date:"",model:"",frame:"",engine:"",lot:"",auditor:""},results:{}};
