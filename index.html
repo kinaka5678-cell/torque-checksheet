@@ -29,6 +29,17 @@ html,body{background:var(--paper);color:var(--ink);font-family:'Inter','Sarabun'
 /* ── MODEL SELECT PAGE ── */
 .model-page{padding:0;}
 .model-topbar{background:linear-gradient(135deg,var(--navy-deep),var(--navy));color:#fff;padding:20px 20px 20px;display:flex;align-items:center;gap:16px;}
+.mode-switch{margin-left:auto;display:flex;gap:8px;flex-shrink:0;}
+.mode-btn{background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.25);color:rgba(255,255,255,.65);border-radius:12px;padding:8px 16px;font-size:13px;font-weight:800;line-height:1.5;cursor:pointer;text-align:center;transition:all .15s;}
+.mode-btn.active{background:#fff;border-color:#fff;color:var(--navy-deep);box-shadow:0 3px 10px rgba(0,0,0,.25);}
+.mode-btn[data-mode="JUDGEMENT"].active{background:#2E7D32;border-color:#2E7D32;color:#fff;}
+@media(max-width:600px){.mode-switch{margin-left:0;margin-top:10px;width:100%;}.mode-btn{flex:1;}}
+body.mode-auditor .clamp-btn{display:none !important;}
+body.mode-auditor .edit-icon-btn{display:none !important;}
+body.mode-auditor #btn-add-item{display:none !important;}
+body.mode-auditor .model-edit-btn{display:none !important;}
+body.mode-auditor .reorder-btns{display:none !important;}
+body.mode-auditor .add-model-btn{display:none !important;}
 .hino-logo{height:52px;width:auto;border-radius:6px;flex-shrink:0;background:#fff;padding:3px;}
 .model-topbar-text{text-align:left;}
 .model-topbar h1{font-size:24px;font-weight:900;letter-spacing:.02em;margin-bottom:2px;}
@@ -250,6 +261,10 @@ table.pr-table td.center{text-align:center;}
       <h1>🔧 Torque Check Sheet</h1>
       <p>เลือก Model เพื่อเริ่มตรวจสอบ</p>
     </div>
+    <div class="mode-switch" id="mode-switch">
+      <button class="mode-btn active" data-mode="AUDITOR" id="mode-btn-auditor">👷<br>Auditor</button>
+      <button class="mode-btn" data-mode="JUDGEMENT" id="mode-btn-judgement">✅<br>Judgement</button>
+    </div>
   </div>
   <div class="model-list" id="model-list"></div>
   <div class="model-action-bar">Hino QA — Digital Tightening Torque Inspection</div>
@@ -468,6 +483,26 @@ const SK = "torque_sys_";
 // ══════════════════════════════════════════════════════════════════
 let models = [];           // [{id, name, desc, icon, items:[]}]
 let currentModelId = null;
+
+// ══════════════════════════════════════════════════════════════════
+// USER MODE — Auditor (fill values only) vs Judgement (Staff can
+// clamp out-of-range values to Std and edit checkpoint setup)
+// ══════════════════════════════════════════════════════════════════
+let appMode = "AUDITOR";
+function setAppMode(mode){
+  appMode = mode;
+  document.body.classList.toggle("mode-auditor", mode==="AUDITOR");
+  document.body.classList.toggle("mode-judgement", mode==="JUDGEMENT");
+  document.querySelectorAll(".mode-btn").forEach(b=>{
+    b.classList.toggle("active", b.dataset.mode===mode);
+  });
+}
+document.getElementById("mode-btn-auditor").addEventListener("click",()=>setAppMode("AUDITOR"));
+document.getElementById("mode-btn-judgement").addEventListener("click",()=>{
+  if(confirm("สลับเป็น Judgement Mode?\n\nโหมดนี้สำหรับ Staff เท่านั้น จะสามารถปรับค่าให้อยู่ในช่วง Std และแก้ไขจุดตรวจได้"))
+    setAppMode("JUDGEMENT");
+});
+setAppMode("AUDITOR");
 let currentItems = [];
 let nextItemId = 1000;
 let nextModelId = 1;
@@ -515,7 +550,7 @@ function renderModelList() {
         </div>
         <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
           <div class="model-arrow">›</div>
-          <button style="font-size:11px;padding:4px 9px;border-radius:6px;border:1.5px solid var(--line);background:transparent;cursor:pointer;color:var(--ink-soft);" data-edit-model="${m.id}">✎ แก้ไข</button>
+          <button class="model-edit-btn" style="font-size:11px;padding:4px 9px;border-radius:6px;border:1.5px solid var(--line);background:transparent;cursor:pointer;color:var(--ink-soft);" data-edit-model="${m.id}">✎ แก้ไข</button>
         </div>
       </div>`;
     div.addEventListener("click", e => {
