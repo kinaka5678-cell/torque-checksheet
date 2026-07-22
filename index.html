@@ -1871,12 +1871,15 @@ document.getElementById("btn-save").addEventListener("click",async()=>{
   s.classList.add("saved");
 });
 
-document.getElementById("btn-clear").addEventListener("click",()=>{
+document.getElementById("btn-clear").addEventListener("click",async()=>{
   if(!confirm("ล้างข้อมูลที่กรอกทั้งหมด?"))return;
   state.results={};
   renderItems();
   attachListeners();
-  markUnsaved();
+  await saveCurrentModelState();
+  const s=document.getElementById("save-status");
+  s.textContent="✓ ล้างและบันทึก "+new Date().toLocaleTimeString("th-TH");
+  s.classList.add("saved");
 });
 
 function formatDate(iso){
