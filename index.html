@@ -1246,17 +1246,36 @@ function updateCard(card, item) {
     meas2d[li][ri] = v;
   });
 
+  // Collect na (ติด) checkbox state, ordered by [li][ri]
+  const na2d = [];
+  labels.forEach((_,li) => { na2d[li] = []; });
+  card.querySelectorAll(".na-check").forEach(chk=>{
+    const li=parseInt(chk.dataset.li), ri=parseInt(chk.dataset.ri);
+    if(!na2d[li]) na2d[li]=[];
+    na2d[li][ri]=chk.checked;
+  });
+
   // Compute per-label avg, then overall X̄ and R
   const validAll = [];
+  let totalRequired = 0;
   labels.forEach((_,li) => {
-    const vals = (meas2d[li]||[]).filter(v=>v!==null&&!isNaN(v));
-    validAll.push(...vals);
+    const repCount = reps[li]||1;
+    for(let ri=0; ri<repCount; ri++){
+      const isNa = !!(na2d[li] && na2d[li][ri]);
+      if(isNa) continue; // ติด rows don't need a value
+      totalRequired++;
+      const v = meas2d[li] ? meas2d[li][ri] : null;
+      if(v!==null && v!==undefined && !isNaN(v)) validAll.push(v);
+    }
   });
 
   const xbar = validAll.length ? validAll.reduce((a,b)=>a+b,0)/validAll.length : null;
   const range = validAll.length > 1 ? Math.max(...validAll)-Math.min(...validAll) : null;
   const allOk = validAll.length > 0 && validAll.every(v=>v>=item.std_min&&v<=item.std_max);
-  const judge = validAll.length===0 ? "PENDING" : (allOk?"OK":"NG");
+  // Only judge OK/NG once EVERY required (non-ติด) sample has a value -
+  // a single filled value must not mark the whole item as done.
+  const allFilled = totalRequired>0 && validAll.length===totalRequired;
+  const judge = !allFilled ? "PENDING" : (allOk?"OK":"NG");
 
   // Color individual inputs
   allInputs.forEach(inp => {
@@ -1276,15 +1295,6 @@ function updateCard(card, item) {
   card.classList.remove("judge-OK","judge-NG");
   if (judge==="OK") card.classList.add("judge-OK");
   if (judge==="NG") card.classList.add("judge-NG");
-
-  // Collect na (ติด) checkbox state, ordered by [li][ri]
-  const na2d = [];
-  labels.forEach((_,li) => { na2d[li] = []; });
-  card.querySelectorAll(".na-check").forEach(chk=>{
-    const li=parseInt(chk.dataset.li), ri=parseInt(chk.dataset.ri);
-    if(!na2d[li]) na2d[li]=[];
-    na2d[li][ri]=chk.checked;
-  });
 
   state.results[item.no] = {meas2d, na2d, xbar, range, judge, auditor: (state.results[item.no]&&state.results[item.no].auditor) || ""};
   updateProgress();
